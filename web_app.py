@@ -99,7 +99,7 @@ def get_ranking_text(participant_scores):
 
 st.set_page_config(page_title="Super Mêlée Turnier", layout="wide")
 
-# Session State Initialisierung: Das "Gedächtnis" der Web-App
+# Session State Initialisierung
 if 'stage' not in st.session_state:
     st.session_state.stage = 'setup'
 if 'match_results' not in st.session_state:
@@ -149,9 +149,7 @@ def name_input_stage():
                             break
                         all_rounds.append(round_data or [])
                 if success:
-                    st.session_state.participants = participants
-                    st.session_state.all_rounds_data = all_rounds
-                    st.session_state.round_byes = round_byes
+                    st.session_state.participants, st.session_state.all_rounds_data, st.session_state.round_byes = participants, all_rounds, round_byes
                     st.session_state.stage = 'results_input'
                     st.rerun()
 
@@ -159,8 +157,6 @@ def name_input_stage():
 # --- STUFE 3: ERGEBNISEINGABE ---
 def results_input_stage():
     st.title("Paarungen & Ergebnisse")
-
-    # Logik, um zu entscheiden, ob die Lobby oder eine Einzelspiel-Seite gezeigt wird
     if st.session_state.selected_match:
         display_single_match_page()
     else:
@@ -170,7 +166,10 @@ def results_input_stage():
 def display_results_lobby():
     """Zeigt die Hauptseite mit allen Spielen und Buttons an."""
     total_matches = sum(len(r) for r in st.session_state.all_rounds_data)
-    st.info(f"Ergebnisse für **{len(st.session_state.match_results)}** von **{total_matches}** Spielen eingetragen.")
+    # Kleiner Fortschrittsbalken
+    progress = len(st.session_state.match_results) / total_matches if total_matches > 0 else 0
+    st.progress(progress,
+                text=f"Ergebnisse für {len(st.session_state.match_results)} von {total_matches} Spielen eingetragen.")
 
     for i, round_data in enumerate(st.session_state.all_rounds_data):
         with st.expander(f"**Runde {i + 1}**", expanded=True):
@@ -182,20 +181,28 @@ def display_results_lobby():
                 team1, team2 = match_info["match"]
                 match_key = f"{','.join(sorted(team1))}-vs-{','.join(sorted(team2))}"
 
-                col1, col2 = st.columns([3, 1])
+                col1, col2 = st.columns([2, 1])
                 label_text = f"**[{match_info['type']}]** {', '.join(team1)} vs {', '.join(team2)}"
                 col1.markdown(label_text, unsafe_allow_html=True)
 
+                # *** HIER IST DIE ÄNDERUNG ***
                 if match_key in st.session_state.match_results:
                     score = st.session_state.match_results[match_key]
-                    col2.success(f"Ergebnis: {score}")
+                    # Zeige Ergebnis und einen "Ändern"-Button an
+                    score_col, button_col = col2.columns([2, 1])
+                    score_col.success(f"{score}")
+                    if button_col.button("Ändern", key=f"edit_{match_key}", use_container_width=True):
+                        st.session_state.selected_match = match_key
+                        st.rerun()
                 else:
-                    if col2.button("Eintragen", key=f"btn_{match_key}"):
+                    # Zeige wie bisher den "Eintragen"-Button an
+                    if col2.button("Eintragen", key=f"btn_{match_key}", use_container_width=True):
                         st.session_state.selected_match = match_key
                         st.rerun()
 
-    if len(st.session_state.match_results) == total_matches:
-        if st.button("Alle Ergebnisse sind da! Rangliste berechnen.", type="primary"):
+    st.write("---")
+    if len(st.session_state.match_results) == total_matches and total_matches > 0:
+        if st.button("Alle Ergebnisse sind da! Rangliste berechnen.", type="primary", use_container_width=True):
             all_results = {}
             for key, score_text in st.session_state.match_results.items():
                 t1_names, t2_names = key.split('-vs-')
@@ -219,10 +226,14 @@ def display_single_match_page():
     st.header(f"Ergebnis für {' & '.join(team1)} vs {' & '.join(team2)}")
 
     with st.form("single_match_form"):
-        score_input = st.text_input("Ergebnis (z.B. 13:10):", key=f"score_input_{match_key}")
+        # *** HIER IST DIE ZWEITE ÄNDERUNG ***
+        # Trägt den bereits gespeicherten Wert in das Feld ein, falls vorhanden
+        existing_value = st.session_state.match_results.get(match_key, "")
+        score_input = st.text_input("Ergebnis (z.B. 13:10):", value=existing_value, key=f"score_input_{match_key}")
 
+        # Buttons in Spalten für schöneres Layout
         col1, col2 = st.columns(2)
-        if col1.form_submit_button("Speichern", type="primary"):
+        if col1.form_submit_button("Speichern & zurück zur Übersicht", type="primary", use_container_width=True):
             try:
                 s1, s2 = map(int, score_input.split(':'))
                 st.session_state.match_results[match_key] = f"{s1}:{s2}"
@@ -232,7 +243,7 @@ def display_single_match_page():
                 if score_input:
                     st.error("Bitte Ergebnis im Format 'Punkte:Punkte' eingeben, z.B. '13:10'.")
 
-        if col2.form_submit_button("Zurück zur Übersicht"):
+        if col2.form_submit_button("Abbrechen & zurück zur Übersicht", use_container_width=True):
             st.session_state.selected_match = None  # Wichtig: Auswahl zurücksetzen
             st.rerun()
 
@@ -243,7 +254,7 @@ def ranking_display_stage():
     st.balloons()
     st.subheader("Endgültige Rangliste")
     st.code(st.session_state.ranking, language=None)
-    if st.button("Neues Turnier starten"):
+    if st.button("Neues Turnier starten", use_container_width=True):
         st.session_state.clear();
         st.session_state.stage = 'setup'
         st.rerun()
